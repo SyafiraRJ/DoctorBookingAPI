@@ -1,0 +1,19 @@
+# Build results
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Logs
+*.log
+
+# Database files
+*.mdf
+*.ldf
+*.dbmdl
+
+# Others
+launchSettings.json
