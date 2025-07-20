@@ -41,6 +41,23 @@ namespace DoctorBookingAPI.Controllers
         [HttpPost]
         public async Task<IActionResult> Create(ReviewCreateDto dto)
         {
+            // Validasi dokter
+            var doctor = await _context.Doctors.FindAsync(dto.DoctorId);
+            if (doctor == null)
+                return NotFound(new { message = $"Doctor dengan ID {dto.DoctorId} tidak ditemukan." });
+
+            // Validasi user
+            var userExists = await _context.Users.AnyAsync(u => u.UserId == dto.UserId);
+            if (!userExists)
+                return NotFound(new { message = $"User dengan ID {dto.UserId} tidak ditemukan." });
+
+            // Validasi appointment
+            var appointment = await _context.Appointments
+                .FirstOrDefaultAsync(a => a.AppointmentId == dto.AppointmentId && a.IsActive);
+            if (appointment == null)
+                return NotFound(new { message = $"Appointment dengan ID {dto.AppointmentId} tidak ditemukan." });
+
+            // Buat review
             var review = new Review
             {
                 DoctorId = dto.DoctorId,
@@ -52,31 +69,26 @@ namespace DoctorBookingAPI.Controllers
             };
 
             _context.Reviews.Add(review);
-
-            // Update rating dokter
-            var doctor = await _context.Doctors.FindAsync(dto.DoctorId);
-            if (doctor != null)
-            {
-                doctor.ReviewCount = (doctor.ReviewCount ?? 0) + 1;
-                doctor.Rating = await _context.Reviews
-                    .Where(r => r.DoctorId == dto.DoctorId)
-                    .AverageAsync(r => r.Rating);
-            }
-
             await _context.SaveChangesAsync();
-            return Ok(review);
+
+            return Ok(new { message = "Review berhasil ditambahkan.", review });
         }
+
 
         // DELETE: api/reviews/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {
             var review = await _context.Reviews.FindAsync(id);
-            if (review == null) return NotFound();
+            if (review == null)
+            {
+                return NotFound(new { message = $"Review dengan ID {id} tidak ditemukan." });
+            }
 
             _context.Reviews.Remove(review);
             await _context.SaveChangesAsync();
-            return NoContent();
+            return Ok(new { message = $"Review dengan ID {id} berhasil dihapus." });
         }
+
     }
 }

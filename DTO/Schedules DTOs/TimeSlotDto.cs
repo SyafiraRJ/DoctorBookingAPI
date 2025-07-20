@@ -4,7 +4,7 @@
     {
         public string Time { get; set; }
         public bool IsAvailable { get; set; }
-        public string Session { get; set; } // "Morning" or "Afternoon"
+        public string Session { get; set; }
     }
 
 }

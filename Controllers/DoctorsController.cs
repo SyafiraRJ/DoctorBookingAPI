@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -27,6 +28,7 @@ namespace DoctorBookingAPI.Controllers
             var doctors = await _context.Doctors
                 .Include(d => d.Specialization)
                 .Include(d => d.Provider)
+                .Include(d => d.Reviews)
                 .Where(d => d.IsActive)
                 .Select(d => new DoctorListDto
                 {
@@ -34,15 +36,42 @@ namespace DoctorBookingAPI.Controllers
                     FullName = d.FullName,
                     Photo = d.Photo,
                     SpecializationName = d.Specialization.Name,
-                    ProviderName = d.Provider.Name,
                     ConsultationFee = d.ConsultationFee ?? 0,
-                    Rating = d.Rating ?? 0,
-                    ReviewCount = d.ReviewCount ?? 0
+                    Rating = d.Reviews.Any()
+                        ? d.Reviews.Average(r => r.Rating).ToString("0.0", CultureInfo.InvariantCulture)
+                        : "-",
                 })
                 .ToListAsync();
 
             return Ok(doctors);
         }
+
+        [HttpGet("by-specialization/{specializationId}")]
+        public async Task<IActionResult> GetDoctorsBySpecialization(int specializationId)
+        {
+            var doctors = await _context.Doctors
+                .Include(d => d.Specialization)
+                .Include(d => d.Reviews)
+                .Where(d => d.SpecializationId == specializationId && d.IsActive)
+                .Select(d => new DoctorListDto
+                {
+                    DoctorId = d.DoctorId,
+                    FullName = d.FullName,
+                    Photo = d.Photo,
+                    SpecializationName = d.Specialization.Name,
+                    ConsultationFee = d.ConsultationFee ?? 0,
+                    Rating = d.Reviews.Any() 
+                        ? d.Reviews.Average(r => r.Rating).ToString("0.0", CultureInfo.InvariantCulture) 
+                        : "-",
+                })
+                .ToListAsync();
+
+            if (!doctors.Any())
+                return NotFound(new { message = "No doctors found for this specialization." });
+
+            return Ok(doctors);
+        }
+
 
         // GET: api/doctors/5
         [HttpGet("{id}")]
@@ -55,21 +84,30 @@ namespace DoctorBookingAPI.Controllers
                 .Include(d => d.DoctorSchedules)
                 .FirstOrDefaultAsync(d => d.DoctorId == id);
 
-            if (doctor == null) return NotFound();
+            if (doctor == null)
+                return NotFound(new { message = "Doctor tidak ditemukan." });
+
+            if(!doctor.IsActive)
+                return BadRequest(new { message = "Doctor ini sudah dinonaktifkan." });
 
             var dto = new DoctorDetailDto
             {
                 DoctorId = doctor.DoctorId,
                 FullName = doctor.FullName,
+                Email = doctor.Email,
+                PhoneNumber = doctor.PhoneNumber,
                 Photo = doctor.Photo,
                 SpecializationName = doctor.Specialization?.Name ?? "",
                 ProviderName = doctor.Provider?.Name ?? "",
                 ProviderAddress = doctor.Provider?.Address ?? "",
-                GoogleMapsLink = doctor.Provider?.GoogleMapsLink ?? "",
+                LicenseNumber = doctor.LicenseNumber,
                 ConsultationFee = doctor.ConsultationFee ?? 0,
                 Biography = doctor.Biography ?? "",
-                Rating = doctor.Rating ?? 0,
-                ReviewCount = doctor.ReviewCount ?? 0,
+                GoogleMapsLink = doctor.Provider?.GoogleMapsLink ?? "",
+                Rating = doctor.Reviews.Any() 
+                    ? doctor.Reviews.Average(r => r.Rating).ToString("0.0", CultureInfo.InvariantCulture) 
+                    : "-",
+                ReviewCount = doctor.Reviews.Count,
                 Reviews = doctor.Reviews.Select(r => new ReviewDto
                 {
                     ReviewId = r.ReviewId,
@@ -133,24 +171,62 @@ namespace DoctorBookingAPI.Controllers
 
         // PUT: api/doctors/5
         [HttpPut("{id}")]
-        public async Task<IActionResult> Update(int id, Doctor model)
+        public async Task<IActionResult> Update(int id, [FromBody] DoctorCreateDto dto)
         {
-            if (id != model.DoctorId) return BadRequest();
-            _context.Entry(model).State = EntityState.Modified;
+            var doctor = await _context.Doctors.FindAsync(id);
+            if (doctor == null)
+                return NotFound("Doctor tidak ditemukan.");
+
+            // Update semua field dari DTO
+            doctor.FullName = dto.FullName;
+            doctor.Email = dto.Email;
+            doctor.PhoneNumber = dto.PhoneNumber;
+            doctor.Photo = dto.Photo;
+            doctor.SpecializationId = dto.SpecializationId;
+            doctor.ProviderId = dto.ProviderId;
+            doctor.LicenseNumber = dto.LicenseNumber;
+            doctor.ConsultationFee = dto.ConsultationFee;
+            doctor.Biography = dto.Biography;
+            doctor.IsActive = dto.IsActive;
+
+            _context.Entry(doctor).State = EntityState.Modified;
             await _context.SaveChangesAsync();
-            return NoContent();
+
+            var response = new DoctorResponseDto
+            {
+                DoctorId = doctor.DoctorId,
+                FullName = doctor.FullName,
+                Email = doctor.Email,
+                PhoneNumber = doctor.PhoneNumber,
+                Photo = doctor.Photo,
+                LicenseNumber = doctor.LicenseNumber,
+                ConsultationFee = doctor.ConsultationFee ?? 0,
+                Biography = doctor.Biography,
+                SpecializationName = (await _context.Specializations.FindAsync(doctor.SpecializationId))?.Name ?? "",
+                ProviderName = (await _context.Providers.FindAsync(doctor.ProviderId))?.Name ?? ""
+            };
+
+            return Ok(new { message = "Doctor berhasil diupdate", data = response });
         }
 
         // DELETE: api/doctors/5
+        // DELETE: api/doctors/5
         [HttpDelete("{id}")]
-        public async Task<IActionResult> Delete(int id)
+        public async Task<IActionResult> Deactivate(int id)
         {
-            var item = await _context.Doctors.FindAsync(id);
-            if (item == null) return NotFound();
-            _context.Doctors.Remove(item);
+            var doctor = await _context.Doctors.FindAsync(id);
+            if (doctor == null)
+                return NotFound(new { message = $"Doctor dengan ID {id} tidak ditemukan." });
+
+            if (!doctor.IsActive)
+                return BadRequest(new { message = $"Doctor dengan ID {id} sudah nonaktif." });
+
+            doctor.IsActive = false;
             await _context.SaveChangesAsync();
-            return NoContent();
+
+            return Ok(new { message = $"Doctor dengan ID {id} telah dinonaktifkan." });
         }
+
 
         private string GetDayName(byte dayOfWeek)
         {

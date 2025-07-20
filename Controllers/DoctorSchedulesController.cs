@@ -39,23 +39,92 @@ namespace DoctorBookingAPI.Controllers
             return Ok(result);
         }
 
-        // POST: api/doctorschedules
-        [HttpPost]
-        public async Task<IActionResult> Create(DoctorSchedule model)
+        // GET: api/doctorschedules/available?doctorId=1&date=2025-07-20
+        [HttpGet("available")]
+        public async Task<IActionResult> GetAvailableSlots(int doctorId, DateTime date)
         {
-            _context.DoctorSchedules.Add(model);
-            await _context.SaveChangesAsync();
-            return Ok(model);
+            var dayOfWeek = (int)date.DayOfWeek;
+            if (dayOfWeek == 0) dayOfWeek = 7; // Minggu = 7
+
+            // Ambil semua jadwal dokter untuk hari itu
+            var schedules = await _context.DoctorSchedules
+                .Where(s => s.DoctorID == doctorId && s.DayOfWeek == dayOfWeek && s.IsActive)
+                .OrderBy(s => s.StartTime)
+                .ToListAsync();
+
+            if (!schedules.Any())
+                return NotFound("Dokter tidak memiliki jadwal pada hari tersebut.");
+
+            // Ambil semua slot yang sudah dibooking di hari itu
+            var bookedSlots = await _context.Appointments
+                .Where(a => a.DoctorId == doctorId && a.AppointmentDate == date && a.IsActive)
+                .Select(a => a.AppointmentTime)
+                .ToListAsync();
+
+            var slots = new List<TimeSlotDto>();
+
+            // Loop setiap jadwal (pagi, sore, dll.)
+            foreach (var schedule in schedules)
+            {
+                var current = schedule.StartTime;
+                var end = schedule.EndTime;
+                var duration = TimeSpan.FromMinutes(schedule.SlotDuration ?? 30);
+
+                while (current + duration <= end)
+                {
+                    slots.Add(new TimeSlotDto
+                    {
+                        Time = current.ToString(@"hh\:mm"),
+                        IsAvailable = !bookedSlots.Contains(current),
+                        Session = GetSessionName(current)
+                    });
+
+                    current = current.Add(duration);
+                }
+            }
+
+            return Ok(slots);
         }
 
-        // PUT: api/doctorschedules/5
-        [HttpPut("{id}")]
-        public async Task<IActionResult> Update(int id, DoctorSchedule model)
+
+        // POST: api/doctorschedules
+        [HttpPost]
+        public async Task<IActionResult> Create(DoctorScheduleCreateDto dto)
         {
-            if (id != model.SchedulesID) return BadRequest();
-            _context.Entry(model).State = EntityState.Modified;
+            var schedule = new DoctorSchedule
+            {
+                DoctorID = dto.DoctorID,
+                DayOfWeek = dto.DayOfWeek,
+                StartTime = TimeSpan.Parse(dto.StartTime),
+                EndTime = TimeSpan.Parse(dto.EndTime),
+                SlotDuration = dto.SlotDuration,
+                IsActive = dto.IsActive,
+                CreatedAt = DateTime.Now
+            };
+
+            _context.DoctorSchedules.Add(schedule);
             await _context.SaveChangesAsync();
-            return NoContent();
+
+            return Ok(schedule);
+        }
+
+        // PUT: api/doctorschedules/{id}
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(int id, DoctorScheduleCreateDto dto)
+        {
+            var schedule = await _context.DoctorSchedules.FindAsync(id);
+            if (schedule == null)
+                return NotFound("Schedule not found.");
+
+            schedule.DoctorID = dto.DoctorID;
+            schedule.DayOfWeek = dto.DayOfWeek;
+            schedule.StartTime = TimeSpan.Parse(dto.StartTime);
+            schedule.EndTime = TimeSpan.Parse(dto.EndTime);
+            schedule.SlotDuration = dto.SlotDuration;
+            schedule.IsActive = dto.IsActive;
+
+            await _context.SaveChangesAsync();
+            return Ok(schedule);
         }
 
         // DELETE: api/doctorschedules/5
@@ -69,43 +138,6 @@ namespace DoctorBookingAPI.Controllers
             return NoContent();
         }
 
-        // GET: api/doctorschedules/available?doctorId=1&date=2025-07-20
-        [HttpGet("available")]
-        public async Task<IActionResult> GetAvailableSlots(int doctorId, DateTime date)
-        {
-            var dayOfWeek = (int)date.DayOfWeek;
-            if (dayOfWeek == 0) dayOfWeek = 7; // Minggu = 7
-
-            var schedule = await _context.DoctorSchedules
-                .FirstOrDefaultAsync(s => s.DoctorID == doctorId && s.DayOfWeek == dayOfWeek && s.IsActive);
-
-            if (schedule == null)
-                return NotFound("Dokter tidak memiliki jadwal pada hari tersebut.");
-
-            var bookedSlots = await _context.Appointments
-                .Where(a => a.DoctorId == doctorId && a.AppointmentDate == date && a.IsActive)
-                .Select(a => a.AppointmentTime)
-                .ToListAsync();
-
-            var slots = new List<TimeSlotDto>();
-            var current = schedule.StartTime;
-            var end = schedule.EndTime;
-            var duration = TimeSpan.FromMinutes(schedule.SlotDuration ?? 30);
-
-            while (current + duration <= end)
-            {
-                slots.Add(new TimeSlotDto
-                {
-                    Time = current.ToString(@"hh\:mm"),
-                    IsAvailable = !bookedSlots.Contains(current),
-                    Session = current.Hours < 12 ? "Morning" : "Afternoon"
-                });
-
-                current = current.Add(duration);
-            }
-
-            return Ok(slots);
-        }
 
         private string GetDayName(byte dayOfWeek)
         {
@@ -121,5 +153,21 @@ namespace DoctorBookingAPI.Controllers
                 _ => "Unknown"
             };
         }
+        private string GetSessionName(TimeSpan time)
+        {
+            var hour = time.Hours;
+
+            if (hour >= 5 && hour < 12)
+                return "Morning";
+            if (hour >= 12 && hour < 17)
+                return "Afternoon";
+            if (hour >= 17 && hour < 21)
+                return "Evening";
+            if (hour >= 21 && hour < 24)
+                return "Night";
+            return "Late Night"; // 00:00 - 04:59
+        }
+    
+
     }
 }

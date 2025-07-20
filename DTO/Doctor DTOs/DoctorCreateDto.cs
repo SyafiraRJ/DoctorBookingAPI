@@ -11,6 +11,7 @@
         public string LicenseNumber { get; set; }
         public decimal ConsultationFee { get; set; }
         public string Biography { get; set; }
+        public bool IsActive { get; set; } = true;
     }
 
 }

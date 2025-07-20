@@ -1,5 +1,6 @@
 ﻿using DoctorBookingAPI;
 using DoctorBookingAPI.DTO;
+using DoctorBookingAPI.DTO.User_DTOs;
 using DoctorBookingAPI.Model;
 using Humanizer;
 using Microsoft.AspNetCore.Http;
@@ -67,76 +68,49 @@ namespace DoctorBookingAPI.Controllers
             });
         }
 
-
         // GET: api/Users
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
             var users = await _context.Users
-                .Select(u => new User
+                .Where(u => u.IsActive  )
+                .Select(u => new UserDTO
                 {
                     UserId = u.UserId,
                     FullName = u.FullName,
                     Email = u.Email,
                     PhoneNumber = u.PhoneNumber,
-                    CreatedAt = u.CreatedAt,
                     Gender = u.Gender,
                     DateOfBirth = u.DateOfBirth,
                     Address = u.Address
-                }).ToListAsync();
+                })
+                .ToListAsync();
 
             return Ok(users);
         }
 
         // GET: api/Users/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<User>> GetUser(int id)
+        public async Task<ActionResult<UserDTO>> GetUser(int id)
         {
-            var user = await _context.Users.FindAsync(id);
+            var user = await _context.Users
+                .Where(u => u.UserId == id)
+                .Select(u => new UserDTO
+                {
+                    UserId = u.UserId,
+                    FullName = u.FullName,
+                    Email = u.Email,
+                    PhoneNumber = u.PhoneNumber,
+                    Gender = u.Gender,
+                    DateOfBirth = u.DateOfBirth,
+                    Address = u.Address,
+                    IsActive = u.IsActive
+                })
+                .FirstOrDefaultAsync();
+
             if (user == null) return NotFound();
-
-            var profile = new User
-            {
-                UserId = user.UserId,
-                FullName = user.FullName,
-                Email = user.Email,
-                PhoneNumber = user.PhoneNumber,
-                Gender = user.Gender,
-                DateOfBirth = user.DateOfBirth,
-                Address = user.Address,
-                CreatedAt = user.CreatedAt
-            };
-
-            return Ok(profile);
+            return Ok(user);
         }
-
-        [HttpGet("user/{userId}")]
-public async Task<IActionResult> GetByUser(int userId)
-{
-    var appointments = await _context.Appointments
-        .Where(a => a.UserId == userId && a.IsActive)
-        .Include(a => a.Doctor)
-            .ThenInclude(d => d.Specialization)
-        .Include(a => a.Doctor)
-            .ThenInclude(d => d.Provider)
-        .Select(a => new AppointmentDetailDto
-        {
-            AppointmentId = a.AppointmentId,
-            DoctorName = a.Doctor.FullName,
-            Specialization = a.Doctor.Specialization.Name,
-            Provider = a.Doctor.Provider.Name,
-            Photo = a.Doctor.Photo,
-            AppointmentDate = a.AppointmentDate,
-            AppointmentTime = a.AppointmentTime,
-            EndTime = a.EndTime,
-            Status = a.Status,
-            PatientNotes = a.PatientNotes,
-            ConsultationFee = a.ConsultationFee
-        })
-        .ToListAsync();
-
-    return Ok(appointments);
-}
 
 
         // PUT: api/users/{id}/profile
@@ -146,20 +120,31 @@ public async Task<IActionResult> GetByUser(int userId)
             var user = await _context.Users.FindAsync(id);
             if (user == null) return NotFound();
 
-            user.Gender = dto.Gender;
-            user.DateOfBirth = dto.DateOfBirth;
-            user.Address = dto.Address;
-            user.UpdatedAt = DateTime.UtcNow;
+                user.Gender = dto.Gender;
+                user.DateOfBirth = dto.DateOfBirth;
+                user.Address = dto.Address;
+                user.UpdatedAt = DateTime.UtcNow;
 
             _context.Users.Update(user);
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Profile updated successfully" });
-        }   
-
-        private bool UserExists(int id)
-        {
-            return _context.Users.Any(e => e.UserId == id);
         }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeactivateUser(int id)
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null) return NotFound(new { message = "User not found." });
+
+            if (!user.IsActive)
+                return BadRequest(new { message = $"User {id} is already deactivated." });
+
+            user.IsActive = false;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = $"User {id} has been deactivated." });
+        }
+
     }
 }

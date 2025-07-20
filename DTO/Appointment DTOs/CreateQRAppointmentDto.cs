@@ -2,11 +2,9 @@
 {
     public class CreateQRAppointmentDto
     {
-        public string FullName { get; set; }
-        public string PhoneNumber { get; set; }
-        public int SpecializationId { get; set; }
-        public string Symptoms { get; set; }
-        public string QRData { get; set; }
+        public int UserId { get; set; }  // User ID wajib, tapi kita cek manual
+        public string? Symptoms { get; set; }
+        public string? QRData { get; set; }
+        public string? PatientNotes { get; set; }
     }
-
 }
