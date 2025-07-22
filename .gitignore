@@ -1,0 +1,24 @@
+# Build results
+bin/
+obj/
+publish_win/
+*.exe
+*.dll
+*.pdb
+
+# User-specific files
+*.user
+*.suo
+
+# Visual Studio
+.vs/
+
+# Logs
+*.log
+
+# Other
+*.cache
+*.temp
+publish_win/
+bin/
+obj/

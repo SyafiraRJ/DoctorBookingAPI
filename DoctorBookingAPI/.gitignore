@@ -1,0 +1,37 @@
+# Build folders
+bin/
+obj/
+build/
+publish/
+
+# User-specific files
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio files
+.vs/
+
+# NuGet packages
+*.nupkg
+packages/
+
+# Logs
+*.log
+
+# Database
+*.mdf
+*.ldf
+*.db
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Others
+*.exe
+*.pdb
