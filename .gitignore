@@ -1,6 +1,4 @@
-# Build results
-bin/
-obj/
+# Publish files
 publish_win/
 *.exe
 *.dll
@@ -12,13 +10,18 @@ publish_win/
 
 # Visual Studio
 .vs/
+bin/
+obj/
 
 # Logs
 *.log
 
-# Other
+# Database files
+*.mdf
+*.ldf
+*.dbmdl
+
+# Others
 *.cache
 *.temp
-publish_win/
-bin/
-obj/
+launchSettings.json
