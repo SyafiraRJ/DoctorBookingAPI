@@ -41,15 +41,33 @@ namespace DoctorBookingAPI.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] UserRegisterDto dto)
         {
-            if (await _context.Users.AnyAsync(u => u.Email == dto.Email))
-                return BadRequest("Email already exists.");
+            var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
 
+            if (existingUser != null)
+            {
+                if (existingUser.IsActive)
+                    return BadRequest("Email already exists.");
+
+                // Kalau nonaktif, update data dan aktifkan kembali
+                existingUser.FullName = dto.FullName;
+                existingUser.PhoneNumber = dto.PhoneNumber;
+                existingUser.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
+                existingUser.IsActive = true;
+                existingUser.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+
+                return Ok(new { message = "Registration successful (reactivated)", userId = existingUser.UserId });
+            }
+
+            // Kalau belum ada, buat user baru
             var user = new User
             {
                 FullName = dto.FullName,
                 Email = dto.Email,
                 PhoneNumber = dto.PhoneNumber,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+                IsActive = true,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -58,6 +76,7 @@ namespace DoctorBookingAPI.Controllers
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Registration successful", userId = user.UserId });
+
         }
 
         [AllowAnonymous]
@@ -65,7 +84,7 @@ namespace DoctorBookingAPI.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] UserLoginDTO dto)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == dto.Email && u.IsActive);
             if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
                 return Unauthorized("Invalid email or password.");
 
